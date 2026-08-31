@@ -10,6 +10,10 @@ app.use(express.json());
 const transactionRoutes = require("./routes/transactionRoutes");
 const authRoutes = require("./routes/authRoutes");
 const chatRoutes = require("./routes/chatRoutes");
+app.get("/", (req, res) => {
+  res.json({ message: "Escape the Rat Race API is running" });
+});
+
 app.use("/api", transactionRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/chat", chatRoutes);
