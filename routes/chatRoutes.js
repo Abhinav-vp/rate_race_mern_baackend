@@ -121,20 +121,40 @@ router.post("/", auth, async (req, res) => {
       .sort({ timestamp: -1 })
       .limit(20);
 
-    // Reverse to chronological order
-    const historyMessages = recentHistory.reverse().map((msg) => ({
+    // Reverse to chronological order and map roles
+    let historyMessages = recentHistory.reverse().map((msg) => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.content }],
     }));
 
-    // Build the conversation with Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // Remove the last message (the one we just saved) — we'll send it via sendMessage
+    historyMessages = historyMessages.slice(0, -1);
 
+    // Sanitize history: must start with 'user' and alternate roles (no consecutive same-role)
+    const sanitized = [];
+    for (const msg of historyMessages) {
+      if (sanitized.length === 0 && msg.role !== "user") continue; // skip until first user msg
+      if (sanitized.length > 0 && sanitized[sanitized.length - 1].role === msg.role) continue; // skip consecutive same role
+      sanitized.push(msg);
+    }
+    // Ensure history ends with a 'model' message (Gemini expects user->model pairs before the new user msg)
+    if (sanitized.length > 0 && sanitized[sanitized.length - 1].role === "user") {
+      sanitized.pop();
+    }
+
+    // Build the conversation with Gemini
     const fullSystemPrompt = `${SYSTEM_PROMPT}\n\n${financialContext}`;
 
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: {
+        role: "user",
+        parts: [{ text: fullSystemPrompt }],
+      },
+    });
+
     const chat = model.startChat({
-      history: historyMessages.slice(0, -1), // exclude the last user message, we'll send it separately
-      systemInstruction: fullSystemPrompt,
+      history: sanitized,
     });
 
     const result = await chat.sendMessage(message.trim());
